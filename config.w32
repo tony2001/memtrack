@@ -1,0 +1,8 @@
+// $Id: config.w32 274377 2009-01-23 15:22:57Z pajoye $
+// vim:ft=javascript
+
+ARG_ENABLE("memtrack", "Enable memtrack support", "no");
+
+if (PHP_MEMTRACK == "yes") {
+	EXTENSION("memtrack", "memtrack.c");
+}

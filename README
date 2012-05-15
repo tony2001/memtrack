@@ -1,0 +1,71 @@
+memtrack PHP extension
+======================
+
+1. How it works
+---------------
+
+memtrack is a PHP extension that tracks memory consumption in PHP scripts 
+and produces reports (warnings) when the consumption reaches certain levels 
+set by the user.
+
+memtrack replaces default executor function by its own function which 
+compares memory usage before and after running the original executor, 
+this way we can tell how much the memory usage has changed.
+
+2. Configuration
+----------------
+
+The following INI options are available at the moment:
+
+ memtrack.enabled - Boolean flag, which enables or disabled the extension.
+                    Default value is 0, i.e. disabled.
+
+ memtrack.soft_limit - A soft memory limit. The extension produces a warning when a 
+                       function reaches it, if the function is not ignored.
+					   Default value is 0.
+
+ memtrack.hard_limit - A hard memory limit. The extension produces a warning when a
+                       function reaches it, whether or not the function is listed 
+					   in memtrack.ignore_functions.
+					   Default value is 0.
+
+ memtrack.ignore_functions - A comma- or whitespace-separated list of functions, 
+                             which are to be ignored. The values are case-insensitive, 
+							 for class methods use Class::method syntax.
+
+ memtrack.vm_limit - Virtual memory size limit (set on a process), which is measured on shutdown only.
+					 The extension produces a warning when the limit is reached.
+					 NB: Available only on Linux.
+					 Default value is 0.
+
+3. Examples
+-----------
+
+# php -d memtrack.enabled=1 -d memtrack.soft_limit=10000 -d memtrack.ignore_functions="" -r '$a = str_repeat("aaaaaaaa", 100000);'
+
+Warning: [memtrack] [pid 26154] internal function str_repeat() executed in Command line code on line 1 allocated 1048576 bytes in Command line code on line 1
+
+# /tmp/1.php
+<?php
+function foo() {
+    $a = array();
+    for ($i = 0; $i < 10000; $i++) $a[] = "test";
+    return $a;
+}
+$arr = foo();
+?>
+
+# php -d memtrack.enabled=1 -d memtrack.soft_limit=1M -d memtrack.ignore_functions="" -d memtrack.vm_limit=3M /tmp/1.php
+
+Warning: [memtrack] [pid 26177] user function foo() executed in /tmp/1.php on line 7 allocated 4194304 bytes in /tmp/1.php on line 0
+Warning: [memtrack] [pid 26177] virtual memory usage on shutdown: 32911360 bytes in Unknown on line 0
+
+
+4. Compatibility with other extensions
+--------------------------------------
+
+memtrack is not a Zend extension, hence it doesn't have any extensions compatibility problems.
+Though it was noticed that running Zend Optimizer with memtrack produces op_array's without any 
+information left, so memtrack is unable to fetch function and class names, as well as filenames 
+and line numbers, which makes memtrack pretty much useless.
+
