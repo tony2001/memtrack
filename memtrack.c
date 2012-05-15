@@ -243,7 +243,11 @@ PHP_RINIT_FUNCTION(memtrack)
 		memtrack_old_execute = zend_execute;
 		zend_execute = memtrack_execute;
 
-		memtrack_old_execute_internal = zend_execute_internal;
+		if (zend_execute_internal) {
+			memtrack_old_execute_internal = zend_execute_internal;
+		} else {
+			memtrack_old_execute_internal = execute_internal;
+		}
 		zend_execute_internal = memtrack_execute_internal;
 		memtrack_execute_initialized = 1;
 	}
