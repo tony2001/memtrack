@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: memtrack.c 317388 2011-09-27 10:59:30Z tony2001 $ */
+/* $Id: memtrack.c 274405 2009-01-23 17:53:42Z tony2001 $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -32,6 +32,8 @@
 #include "zend_constants.h"
 #include "zend_compile.h"
 #include "zend_extensions.h"
+#include "zend_builtin_functions.h"
+#include "ext/standard/php_var.h"
 
 ZEND_DECLARE_MODULE_GLOBALS(memtrack)
 
@@ -53,7 +55,7 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 static int memtrack_get_vm_size(void) /* {{{ */
 {
 	struct mallinfo info;
-	
+
 	info = mallinfo();
 	return info.arena + info.hblkhd;
 }
@@ -69,7 +71,7 @@ static char *mt_get_function_name(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 	zend_execute_data *exec_data = EG(current_execute_data);
 	zend_class_entry *ce;
 	char *space;
-	
+
 	if (op_array) {
 		ce = ((zend_function *)op_array)->common.scope;
 		class_name = ce ? ce->name : "";
@@ -190,6 +192,28 @@ static void php_memtrack_init_globals(zend_memtrack_globals *memtrack_globals) /
 }
 /* }}} */
 
+static int php_memtrack_get_backtrace(zval **str_trace TSRMLS_DC) /* {{{ */
+{
+	zval *trace;
+
+	MAKE_STD_ZVAL(trace);
+	MAKE_STD_ZVAL(*str_trace);
+	zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC);
+
+	php_start_ob_buffer (NULL, 0, 1 TSRMLS_CC);
+	php_var_export(&trace, 1 TSRMLS_CC);
+	if (php_ob_get_buffer (*str_trace TSRMLS_CC) == FAILURE) {
+		zval_ptr_dtor(&trace);
+		zval_ptr_dtor(str_trace);
+		*str_trace = NULL;
+		return FAILURE;
+	}
+	php_end_ob_buffer (0, 0 TSRMLS_CC);
+	zval_ptr_dtor(&trace);
+	return SUCCESS;
+}
+/* }}} */
+
 /* {{{ PHP_INI
  */
 PHP_INI_BEGIN()
@@ -286,7 +310,7 @@ PHP_MINFO_FUNCTION(memtrack)
 {
 	php_info_print_table_start();
 	php_info_print_table_header(2, "memtrack support", "enabled");
-	php_info_print_table_row(2, "Revision", "$Revision: 317388 $");
+	php_info_print_table_row(2, "Revision", "$Revision: 274405 $");
 	php_info_print_table_end();
 
 	DISPLAY_INI_ENTRIES();
@@ -353,7 +377,21 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 			zend_str_tolower(lc_fname, fname_len);
 
 			if (usage_diff >= MEMTRACK_G(hard_limit) || zend_hash_exists(&MEMTRACK_G(ignore_funcs_hash), lc_fname, fname_len + 1) == 0) {
-				zend_error(E_CORE_WARNING, "[memtrack] [pid %d] user function %s() executed in %s on line %d allocated %ld bytes", getpid(), fname, filename, lineno, usage_diff);
+				zval *trace;
+				char *buf;
+
+				php_memtrack_get_backtrace(&trace TSRMLS_CC);
+				spprintf(&buf, 0, "[memtrack] [pid %d] function %s() executed in %s on line %d allocated %zd bytes\nPHP backtrace:\n%s", getpid(), fname, filename, lineno, usage_diff, Z_STRVAL_P(trace));
+
+				if (trace) {
+					zval_ptr_dtor(&trace);
+				}
+				if (PG(error_log)) {
+					php_log_err(buf TSRMLS_CC);
+				} else {
+					zend_error(E_CORE_WARNING, "%s", buf);
+				}
+				efree(buf);
 				MEMTRACK_G(warnings)++;
 			}
 			efree(fname);
@@ -393,7 +431,20 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 			zend_str_tolower(lc_fname, fname_len);
 
 			if (usage_diff >= MEMTRACK_G(hard_limit) || zend_hash_exists(&MEMTRACK_G(ignore_funcs_hash), lc_fname, fname_len + 1) == 0) {
-				zend_error(E_CORE_WARNING, "[memtrack] [pid %d] internal function %s() executed in %s on line %d allocated %ld bytes", getpid(), fname, filename, lineno, usage_diff);
+				zval *trace;
+				char *buf;
+
+				php_memtrack_get_backtrace(&trace TSRMLS_CC);
+				spprintf(&buf, 0, "[memtrack] [pid %d] internal function %s() executed in %s on line %d allocated %zd bytes\nPHP backtrace:\n%s", getpid(), fname, filename, lineno, usage_diff, Z_STRVAL_P(trace));
+				if (trace) {
+					zval_ptr_dtor(&trace);
+				}
+				if (PG(error_log)) {
+					php_log_err(buf TSRMLS_CC);
+				} else {
+					zend_error(E_CORE_WARNING, "%s", buf);
+				}
+				efree(buf);
 				MEMTRACK_G(warnings)++;
 			}
 			efree(fname);
