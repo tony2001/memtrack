@@ -257,6 +257,8 @@ PHP_MSHUTDOWN_FUNCTION(memtrack)
  */
 PHP_RINIT_FUNCTION(memtrack)
 {
+	zval **tmp;
+
 	if (!MEMTRACK_G(enabled)) {
 		return SUCCESS;
 	}
@@ -274,6 +276,12 @@ PHP_RINIT_FUNCTION(memtrack)
 		}
 		zend_execute_internal = memtrack_execute_internal;
 		memtrack_execute_initialized = 1;
+	}
+
+	if (PG(http_globals)[TRACK_VARS_SERVER] && zend_hash_find(HASH_OF(PG(http_globals)[TRACK_VARS_SERVER]), "SCRIPT_NAME", sizeof("SCRIPT_NAME"), (void **)  &tmp) != FAILURE && Z_TYPE_PP(tmp) == IS_STRING && Z_STRLEN_PP(tmp) > 0) {
+		MEMTRACK_G(script_name) = estrndup(Z_STRVAL_PP(tmp), Z_STRLEN_PP(tmp));
+	} else {
+		MEMTRACK_G(script_name) = NULL;
 	}
 
 	php_memtrack_parse_ignore_funcs(TSRMLS_C);
@@ -296,10 +304,16 @@ PHP_RSHUTDOWN_FUNCTION(memtrack)
 		int vmsize = memtrack_get_vm_size();
 
 		if (vmsize > 0 && vmsize >= MEMTRACK_G(vm_limit)) {
-			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] virtual memory usage on shutdown: %d bytes", getpid(), vmsize);
+			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] [script: %s] virtual memory usage on shutdown: %d bytes", getpid(), MEMTRACK_G(script_name) ? MEMTRACK_G(script_name) : "unknown", vmsize);
 		}
 	}
 #endif
+
+	if (MEMTRACK_G(script_name)) {
+		efree(MEMTRACK_G(script_name));
+		MEMTRACK_G(script_name) = NULL;
+	}
+
 	return SUCCESS;
 }
 /* }}} */

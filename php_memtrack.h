@@ -39,6 +39,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memtrack)
 	HashTable ignore_funcs_hash;
 	size_t prev_memory_usage;
 	int warnings;
+	char *script_name;
 ZEND_END_MODULE_GLOBALS(memtrack)
 
 #ifdef ZTS
