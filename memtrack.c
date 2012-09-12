@@ -417,22 +417,21 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 		MEMTRACK_G(prev_memory_usage) = memory_usage_final;
 	}
 
-#ifdef PHP_MEMTRACK_HAVE_MALLINFO
 	if (!MEMTRACK_G(vm_warned) && MEMTRACK_G(vm_limit) > 0) {
-		int vmsize = memtrack_get_vm_size();
+		//int vmsize = memtrack_get_vm_size(); SLOOW
+		size_t vmsize = zend_memory_usage(1 TSRMLS_CC);
 
 		if (vmsize > 0 && vmsize >= MEMTRACK_G(vm_limit)) {
 			zval *trace;
 			php_memtrack_get_backtrace(&trace TSRMLS_CC);
 
-			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] [script: %s] virtual memory limit exceeded: vm_limit = %ldKb, actual value = %dKb\nPHP backtrace:\n%s", getpid(), MEMTRACK_G(script_name) ? MEMTRACK_G(script_name) : "unknown", (long)(MEMTRACK_G(vm_limit)/1024), (int)(vmsize/1024), trace ? Z_STRVAL_P(trace) : "");
+			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] [script: %s] virtual memory limit exceeded: vm_limit = %ldKb, actual value = %zdKb\nPHP backtrace:\n%s", getpid(), MEMTRACK_G(script_name) ? MEMTRACK_G(script_name) : "unknown", (long)(MEMTRACK_G(vm_limit)/1024), (size_t)(vmsize/1024), trace ? Z_STRVAL_P(trace) : "");
 			MEMTRACK_G(vm_warned) = 1;
 			if (trace) {
 				zval_ptr_dtor(&trace);
 			}
 		}
 	}
-#endif
 }
 /* }}} */
 
@@ -486,15 +485,15 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 		MEMTRACK_G(prev_memory_usage) = memory_usage_final;
 	}
 
-#ifdef PHP_MEMTRACK_HAVE_MALLINFO
 	if (!MEMTRACK_G(vm_warned) && MEMTRACK_G(vm_limit) > 0) {
-		int vmsize = memtrack_get_vm_size();
+		//int vmsize = memtrack_get_vm_size(); SLOOW
+		size_t vmsize = zend_memory_usage(1 TSRMLS_CC);
 
 		if (vmsize > 0 && vmsize >= MEMTRACK_G(vm_limit)) {
 			zval *trace;
 			php_memtrack_get_backtrace(&trace TSRMLS_CC);
 
-			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] [script: %s] virtual memory limit exceeded: vm_limit = %ldKb, actual value = %dKb\nPHP backtrace:\n%s", getpid(), MEMTRACK_G(script_name) ? MEMTRACK_G(script_name) : "unknown", (long)(MEMTRACK_G(vm_limit)/1024), (int)(vmsize/1024), trace ? Z_STRVAL_P(trace) : "");
+			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] [script: %s] virtual memory limit exceeded: vm_limit = %ldKb, actual value = %zdKb\nPHP backtrace:\n%s", getpid(), MEMTRACK_G(script_name) ? MEMTRACK_G(script_name) : "unknown", (long)(MEMTRACK_G(vm_limit)/1024), (size_t)(vmsize/1024), trace ? Z_STRVAL_P(trace) : "");
 			MEMTRACK_G(vm_warned) = 1;
 			if (trace) {
 				zval_ptr_dtor(&trace);
@@ -502,7 +501,6 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 		}
 
 	}
-#endif
 }
 /* }}} */
 
