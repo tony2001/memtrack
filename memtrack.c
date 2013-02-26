@@ -47,6 +47,8 @@ void (*memtrack_old_execute)(zend_op_array *op_array TSRMLS_DC);
 void memtrack_execute(zend_op_array *op_array TSRMLS_DC);
 void (*memtrack_old_execute_internal)(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
 void memtrack_execute_internal(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
+static void (*mt_saved_on_timeout)(int seconds TSRMLS_DC);
+ZEND_DLEXPORT void memtrack_on_timeout(int seconds TSRMLS_DC);
 
 #ifdef PHP_MEMTRACK_HAVE_MALLINFO
 # ifdef HAVE_MALLOC_H
@@ -192,13 +194,38 @@ static void php_memtrack_init_globals(zend_memtrack_globals *memtrack_globals) /
 }
 /* }}} */
 
-static int php_memtrack_get_backtrace(zval **str_trace TSRMLS_DC) /* {{{ */
+static int memtrack_args_remover_cb(zval *entry TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key) /* {{{ */
+{
+	if (hash_key->nKeyLength == sizeof("args") && memcmp(hash_key->arKey, "args", 4) == 0) {
+		return ZEND_HASH_APPLY_REMOVE;
+	}
+
+	return ZEND_HASH_APPLY_KEEP;
+}
+/* }}} */
+
+static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_DC) /* {{{ */
 {
 	zval *trace;
 
 	MAKE_STD_ZVAL(trace);
 	MAKE_STD_ZVAL(*str_trace);
 	zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC);
+
+	if (remove_args) {
+		HashPosition pos;
+		zval **element;
+
+		for (zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(trace), &pos);
+				zend_hash_get_current_data_ex(Z_ARRVAL_P(trace), (void **) &element, &pos) == SUCCESS;
+				zend_hash_move_forward_ex(Z_ARRVAL_P(trace), &pos)
+			) {
+			if (Z_TYPE_PP(element) != IS_ARRAY) {
+				continue;
+			}
+			zend_hash_apply_with_arguments(Z_ARRVAL_PP(element) TSRMLS_CC, (apply_func_args_t) memtrack_args_remover_cb, 0);
+		}
+	}
 
 	php_start_ob_buffer (NULL, 0, 1 TSRMLS_CC);
 	php_var_export(&trace, 1 TSRMLS_CC);
@@ -213,6 +240,32 @@ static int php_memtrack_get_backtrace(zval **str_trace TSRMLS_DC) /* {{{ */
 	return SUCCESS;
 }
 /* }}} */
+
+ZEND_DLEXPORT void memtrack_on_timeout(int seconds TSRMLS_DC) /* {{{ */
+{
+	zval *trace;
+	char *buf;
+
+	if (!MEMTRACK_G(enabled)) {
+		mt_saved_on_timeout(seconds);
+		return;
+	}
+
+	php_memtrack_get_backtrace(&trace, 1 TSRMLS_CC);
+	spprintf(&buf, 0, "[memtrack] [pid %d] Maximum execution time of %d second%s exceeded\nPHP backtrace:\n%s", getpid(), EG(timeout_seconds), EG(timeout_seconds) == 1 ? "" : "s", Z_STRVAL_P(trace));
+
+	if (trace) {
+		zval_ptr_dtor(&trace);
+	}
+	if (PG(error_log)) {
+		php_log_err(buf TSRMLS_CC);
+	} else {
+		zend_error(E_CORE_WARNING, "%s", buf);
+	}
+	mt_saved_on_timeout(seconds);
+}
+/* }}} */
+
 
 /* {{{ PHP_INI
  */
@@ -232,6 +285,9 @@ PHP_INI_END()
 PHP_MINIT_FUNCTION(memtrack)
 {
 	ZEND_INIT_MODULE_GLOBALS(memtrack, php_memtrack_init_globals, NULL);
+
+	mt_saved_on_timeout = zend_on_timeout;
+	zend_on_timeout = memtrack_on_timeout;
 
 	REGISTER_INI_ENTRIES();
 
@@ -396,7 +452,7 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 				zval *trace;
 				char *buf;
 
-				php_memtrack_get_backtrace(&trace TSRMLS_CC);
+				php_memtrack_get_backtrace(&trace, 1 TSRMLS_CC);
 				spprintf(&buf, 0, "[memtrack] [pid %d] function %s() executed in %s on line %d allocated %zd bytes\nPHP backtrace:\n%s", getpid(), fname, filename, lineno, usage_diff, trace ? Z_STRVAL_P(trace) : "");
 
 				if (trace) {
@@ -423,7 +479,7 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 
 		if (vmsize > 0 && vmsize >= MEMTRACK_G(vm_limit)) {
 			zval *trace;
-			php_memtrack_get_backtrace(&trace TSRMLS_CC);
+			php_memtrack_get_backtrace(&trace, 1 TSRMLS_CC);
 
 			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] [script: %s] virtual memory limit exceeded: vm_limit = %ldKb, actual value = %zdKb\nPHP backtrace:\n%s", getpid(), MEMTRACK_G(script_name) ? MEMTRACK_G(script_name) : "unknown", (long)(MEMTRACK_G(vm_limit)/1024), (size_t)(vmsize/1024), trace ? Z_STRVAL_P(trace) : "");
 			MEMTRACK_G(vm_warned) = 1;
@@ -466,7 +522,7 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 				zval *trace;
 				char *buf;
 
-				php_memtrack_get_backtrace(&trace TSRMLS_CC);
+				php_memtrack_get_backtrace(&trace, 1 TSRMLS_CC);
 				spprintf(&buf, 0, "[memtrack] [pid %d] internal function %s() executed in %s on line %d allocated %zd bytes\nPHP backtrace:\n%s", getpid(), fname, filename, lineno, usage_diff, trace ? Z_STRVAL_P(trace) : "");
 				if (trace) {
 					zval_ptr_dtor(&trace);
@@ -491,7 +547,7 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 
 		if (vmsize > 0 && vmsize >= MEMTRACK_G(vm_limit)) {
 			zval *trace;
-			php_memtrack_get_backtrace(&trace TSRMLS_CC);
+			php_memtrack_get_backtrace(&trace, 1 TSRMLS_CC);
 
 			zend_error(E_CORE_WARNING, "[memtrack] [pid %d] [script: %s] virtual memory limit exceeded: vm_limit = %ldKb, actual value = %zdKb\nPHP backtrace:\n%s", getpid(), MEMTRACK_G(script_name) ? MEMTRACK_G(script_name) : "unknown", (long)(MEMTRACK_G(vm_limit)/1024), (size_t)(vmsize/1024), trace ? Z_STRVAL_P(trace) : "");
 			MEMTRACK_G(vm_warned) = 1;
