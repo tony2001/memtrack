@@ -113,8 +113,8 @@ static char *mt_get_function_name(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 
 	if (!free_fname && !strcmp("main", current_fname)) {
 
-		if (exec_data && exec_data->opline && exec_data->opline->op2.op_type == IS_UNUSED) {
-			switch (Z_LVAL(exec_data->opline->op2.u.constant)) {
+		if (exec_data && exec_data->opline && GET_OP2_TYPE(exec_data) == IS_UNUSED) {
+			switch (GET_OP2_NAME(exec_data)) {
 				case ZEND_REQUIRE_ONCE:
 					current_fname = "require_once";
 					break;
@@ -210,7 +210,7 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 
 	MAKE_STD_ZVAL(trace);
 	MAKE_STD_ZVAL(*str_trace);
-	zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC);
+	ZEND_FETCH_DEBUG_BACKTRACE(trace);
 
 	if (remove_args) {
 		HashPosition pos;
