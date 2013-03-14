@@ -66,26 +66,26 @@ static int memtrack_get_vm_size(void) /* {{{ */
 
 static char *mt_get_function_name(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 {
-	char *current_fname = NULL;
-	char *class_name, *fname;
+	char *current_fname = NULL, *class_name;
+	const char *fname;
 	zend_bool free_fname = 0;
 	int class_name_len, fname_len;
 	zend_execute_data *exec_data = EG(current_execute_data);
 	zend_class_entry *ce;
-	char *space;
+	const char *space;
 
 	if (op_array) {
 		ce = ((zend_function *)op_array)->common.scope;
-		class_name = ce ? ce->name : "";
+		class_name = ce ? (char *)ce->name : "";
 	} else {
-		class_name = get_active_class_name(&space TSRMLS_CC);
+		class_name = (char *)get_active_class_name(&space TSRMLS_CC);
 	}
 
 	if (class_name[0] == '\0') {
 		if (op_array) {
-			current_fname = op_array->function_name;
+			current_fname = (char *)op_array->function_name;
 		} else {
-			current_fname = get_active_function_name(TSRMLS_C);
+			current_fname = (char *)get_active_function_name(TSRMLS_C);
 		}
 	} else {
 		if (op_array) {
@@ -438,7 +438,7 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 
 		if (usage_diff >= MEMTRACK_G(soft_limit)) {
 			char *fname, *lc_fname;
-			char *filename = (EG(current_execute_data) && EG(current_execute_data)->op_array) ? EG(current_execute_data)->op_array->filename : "";
+			const char *filename = (EG(current_execute_data) && EG(current_execute_data)->op_array) ? EG(current_execute_data)->op_array->filename : "";
 			int lineno = (EG(current_execute_data) && EG(current_execute_data)->opline) ? EG(current_execute_data)->opline->lineno : 0;
 			int fname_len;
 
@@ -510,7 +510,7 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 		if (usage_diff >= MEMTRACK_G(soft_limit)) {
 			char *lc_fname, *fname = mt_get_function_name(NULL TSRMLS_CC);
 			int lineno = (current_execute_data && current_execute_data->opline) ? current_execute_data->opline->lineno : 0;
-			char *filename = (current_execute_data && current_execute_data->op_array) ? current_execute_data->op_array->filename : "unknown";
+			const char *filename = (current_execute_data && current_execute_data->op_array) ? current_execute_data->op_array->filename : "unknown";
 			int fname_len;
 
 			fname_len = strlen(fname);
