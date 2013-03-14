@@ -26,6 +26,16 @@
 extern zend_module_entry memtrack_module_entry;
 #define phpext_memtrack_ptr &memtrack_module_entry
 
+#if PHP_VERSION_ID < 50400
+#define GET_OP2_TYPE(exec_data) exec_data->opline->op2.op_type
+#define GET_OP2_NAME(exec_data) Z_LVAL(exec_data->opline->op2.u.constant)
+#define ZEND_FETCH_DEBUG_BACKTRACE zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC);
+#else
+#define GET_OP2_TYPE(exec_data) exec_data->opline->op2_type
+#define GET_OP2_NAME(exec_data) exec_data->opline->op2.constant
+#define ZEND_FETCH_DEBUG_BACKTRACE(trace) zend_fetch_debug_backtrace(trace, 0, 0, 0 TSRMLS_CC);
+#endif
+
 #ifdef ZTS
 #include "TSRM.h"
 #endif
