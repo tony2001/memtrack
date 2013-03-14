@@ -227,15 +227,15 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 		}
 	}
 
-	php_start_ob_buffer (NULL, 0, 1 TSRMLS_CC);
+	PHP_OB_START_DEFAULT;
 	php_var_export(&trace, 1 TSRMLS_CC);
-	if (php_ob_get_buffer (*str_trace TSRMLS_CC) == FAILURE) {
+	if (PHP_OB_GET_BUF(*str_trace) == FAILURE) {
 		zval_ptr_dtor(&trace);
 		zval_ptr_dtor(str_trace);
 		*str_trace = NULL;
 		return FAILURE;
 	}
-	php_end_ob_buffer (0, 0 TSRMLS_CC);
+	PHP_OB_END_DISCARD;
 	zval_ptr_dtor(&trace);
 	return SUCCESS;
 }

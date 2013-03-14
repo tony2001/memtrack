@@ -27,13 +27,23 @@ extern zend_module_entry memtrack_module_entry;
 #define phpext_memtrack_ptr &memtrack_module_entry
 
 #if PHP_VERSION_ID < 50400
+
 #define GET_OP2_TYPE(exec_data) exec_data->opline->op2.op_type
 #define GET_OP2_NAME(exec_data) Z_LVAL(exec_data->opline->op2.u.constant)
-#define ZEND_FETCH_DEBUG_BACKTRACE zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC);
+#define ZEND_FETCH_DEBUG_BACKTRACE zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC)
+#define PHP_OB_START_DEFAULT php_start_ob_buffer (NULL, 0, 1 TSRMLS_CC)
+#define PHP_OB_GET_BUF(zval_buf) php_ob_get_buffer (zval_buf TSRMLS_CC)
+#define PHP_OB_END_DISCARD php_end_ob_buffer(0, 0 TSRMLS_CC)
+
 #else
+
 #define GET_OP2_TYPE(exec_data) exec_data->opline->op2_type
 #define GET_OP2_NAME(exec_data) exec_data->opline->op2.constant
-#define ZEND_FETCH_DEBUG_BACKTRACE(trace) zend_fetch_debug_backtrace(trace, 0, 0, 0 TSRMLS_CC);
+#define ZEND_FETCH_DEBUG_BACKTRACE(trace) zend_fetch_debug_backtrace(trace, 0, 0, 0 TSRMLS_CC)
+#define PHP_OB_START_DEFAULT php_output_start_default(TSRMLS_C)
+#define PHP_OB_GET_BUF(zval_buf)  php_output_get_contents(zval_buf TSRMLS_CC)
+#define PHP_OB_END_DISCARD php_output_discard(TSRMLS_CC)
+
 #endif
 
 #ifdef ZTS
