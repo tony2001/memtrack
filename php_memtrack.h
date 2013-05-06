@@ -41,6 +41,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memtrack)
 	int warnings;
 	int vm_warned;
 	char *script_name;
+	zval *data;
 ZEND_END_MODULE_GLOBALS(memtrack)
 
 #ifdef ZTS

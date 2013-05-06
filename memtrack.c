@@ -227,6 +227,10 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 		}
 	}
 
+	if (MEMTRACK_G(data)) {
+		add_assoc_zval(trace, "memtrack_data", MEMTRACK_G(data));
+	}
+
 	php_start_ob_buffer (NULL, 0, 1 TSRMLS_CC);
 	php_var_export(&trace, 1 TSRMLS_CC);
 	if (php_ob_get_buffer (*str_trace TSRMLS_CC) == FAILURE) {
@@ -351,6 +355,11 @@ PHP_RINIT_FUNCTION(memtrack)
  */
 PHP_RSHUTDOWN_FUNCTION(memtrack)
 {
+	if (MEMTRACK_G(data)) {
+		zval_ptr_dtor(&MEMTRACK_G(data));
+		MEMTRACK_G(data) = NULL;
+	}
+
 	if (!MEMTRACK_G(enabled)) {
 		return SUCCESS;
 	}
@@ -389,9 +398,46 @@ PHP_MINFO_FUNCTION(memtrack)
 }
 /* }}} */
 
+static PHP_FUNCTION(memtrack_data_set) /* {{{ */
+{
+	zval *data;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &data) != SUCCESS) {
+		return;
+	}
+
+	if (MEMTRACK_G(data)) {
+		zval_ptr_dtor(&MEMTRACK_G(data));
+	}
+
+	MAKE_STD_ZVAL(MEMTRACK_G(data));
+	*MEMTRACK_G(data) = *data;
+	zval_copy_ctor(MEMTRACK_G(data));
+	INIT_PZVAL(MEMTRACK_G(data));
+
+	RETURN_TRUE;
+}
+/* }}} */
+
+static PHP_FUNCTION(memtrack_data_get) /* {{{ */
+{
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "") != SUCCESS) {
+		return;
+	}
+
+	if (MEMTRACK_G(data)) {
+		RETURN_ZVAL(MEMTRACK_G(data), 1, 0);
+	}
+
+	RETURN_FALSE;
+}
+/* }}} */
+
 /* {{{ memtrack_functions[]
  */
 zend_function_entry memtrack_functions[] = {
+	PHP_FE(memtrack_data_set, NULL)
+	PHP_FE(memtrack_data_get, NULL)
 	{NULL, NULL, NULL}
 };
 /* }}} */
