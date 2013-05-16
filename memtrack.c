@@ -228,6 +228,7 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 	}
 
 	if (MEMTRACK_G(data)) {
+		Z_ADDREF_P(MEMTRACK_G(data));
 		add_assoc_zval(trace, "memtrack_data", MEMTRACK_G(data));
 	}
 
@@ -345,6 +346,7 @@ PHP_RINIT_FUNCTION(memtrack)
 	}
 
 	MEMTRACK_G(vm_warned) = 0;
+	MEMTRACK_G(data) = NULL;
 
 	php_memtrack_parse_ignore_funcs(TSRMLS_C);
 	return SUCCESS;
