@@ -34,6 +34,7 @@
 #include "zend_extensions.h"
 #include "zend_builtin_functions.h"
 #include "ext/standard/php_var.h"
+#include "ext/standard/php_smart_str.h"
 
 ZEND_DECLARE_MODULE_GLOBALS(memtrack)
 
@@ -43,10 +44,17 @@ ZEND_GET_MODULE(memtrack)
 
 int memtrack_execute_initialized = 0;
 
+#if PHP_VERSION_ID < 50500
 void (*memtrack_old_execute)(zend_op_array *op_array TSRMLS_DC);
 void memtrack_execute(zend_op_array *op_array TSRMLS_DC);
 void (*memtrack_old_execute_internal)(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
 void memtrack_execute_internal(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC);
+#else
+void (*memtrack_old_execute_ex)(zend_execute_data *execute_data TSRMLS_DC);
+void memtrack_execute_ex(zend_execute_data *execute_data TSRMLS_DC);
+void (*memtrack_old_execute_internal)(zend_execute_data *current_execute_data, struct _zend_fcall_info *fci, int return_value_used TSRMLS_DC);
+void memtrack_execute_internal(zend_execute_data *current_execute_data, struct _zend_fcall_info *fci, int return_value_used TSRMLS_DC);
+#endif
 static void (*mt_saved_on_timeout)(int seconds TSRMLS_DC);
 ZEND_DLEXPORT void memtrack_on_timeout(int seconds TSRMLS_DC);
 
@@ -113,8 +121,13 @@ static char *mt_get_function_name(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 
 	if (!free_fname && !strcmp("main", current_fname)) {
 
+#if PHP_VERSION_ID < 50500
 		if (exec_data && exec_data->opline && exec_data->opline->op2.op_type == IS_UNUSED) {
 			switch (Z_LVAL(exec_data->opline->op2.u.constant)) {
+#else
+		if (exec_data && exec_data->opline) {
+			switch (exec_data->opline->extended_value) {
+#endif
 				case ZEND_REQUIRE_ONCE:
 					current_fname = "require_once";
 					break;
@@ -210,7 +223,11 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 
 	MAKE_STD_ZVAL(trace);
 	MAKE_STD_ZVAL(*str_trace);
+#if PHP_VERSION_ID < 50500
 	zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC);
+#else
+	zend_fetch_debug_backtrace(trace, 0, 0, 0 TSRMLS_CC);
+#endif
 
 	if (remove_args) {
 		HashPosition pos;
@@ -232,6 +249,7 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 		add_assoc_zval(trace, "memtrack_data", MEMTRACK_G(data));
 	}
 
+#if PHP_VERSION_ID < 50400
 	php_start_ob_buffer (NULL, 0, 1 TSRMLS_CC);
 	php_var_export(&trace, 1 TSRMLS_CC);
 	if (php_ob_get_buffer (*str_trace TSRMLS_CC) == FAILURE) {
@@ -241,7 +259,21 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 		return FAILURE;
 	}
 	php_end_ob_buffer (0, 0 TSRMLS_CC);
+#else
+	{
+		smart_str buf = {0};
+
+		php_var_export_ex(&trace, 1, &buf TSRMLS_CC);
+		smart_str_0(&buf);
+
+		MAKE_STD_ZVAL(*str_trace);
+		ZVAL_STRINGL(*str_trace, buf.c, buf.len, 1);
+		smart_str_free(&buf);
+	}
+#endif
+
 	zval_ptr_dtor(&trace);
+
 	return SUCCESS;
 }
 /* }}} */
@@ -307,8 +339,13 @@ PHP_MSHUTDOWN_FUNCTION(memtrack)
 	UNREGISTER_INI_ENTRIES();
 
 	if (memtrack_execute_initialized) {
+#if PHP_VERSION_ID < 50500
 		zend_execute = memtrack_old_execute;
 		zend_execute_internal = memtrack_old_execute_internal;
+#else
+		zend_execute_ex = memtrack_old_execute_ex;
+		zend_execute_internal = memtrack_old_execute_internal;
+#endif
 	}
 	return SUCCESS;
 }
@@ -327,8 +364,13 @@ PHP_RINIT_FUNCTION(memtrack)
 	zend_hash_init(&MEMTRACK_G(ignore_funcs_hash), 16, NULL, NULL, 0);
 
 	if (!memtrack_execute_initialized) {
+#if PHP_VERSION_ID < 50500
 		memtrack_old_execute = zend_execute;
 		zend_execute = memtrack_execute;
+#else
+		memtrack_old_execute_ex = zend_execute_ex;
+		zend_execute_ex = memtrack_execute_ex;
+#endif
 
 		if (zend_execute_internal) {
 			memtrack_old_execute_internal = zend_execute_internal;
@@ -464,10 +506,23 @@ zend_module_entry memtrack_module_entry = {
 };
 /* }}} */
 
+#if PHP_VERSION_ID < 50500
 void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 {
+    zend_execute_data    *edata = EG(current_execute_data);
+#else
+void memtrack_execute_ex(zend_execute_data *execute_data TSRMLS_DC)
+{
+    zend_op_array        *op_array = execute_data->op_array;
+    zend_execute_data    *edata = execute_data->prev_execute_data;
+#endif
+
 	if (MEMTRACK_G(soft_limit) <= 0 && MEMTRACK_G(hard_limit) <= 0) {
+#if PHP_VERSION_ID < 50500
 		memtrack_old_execute(op_array TSRMLS_CC);
+#else
+		memtrack_old_execute_ex(execute_data TSRMLS_CC);
+#endif
 	} else {
 		size_t memory_usage_start = 0, memory_usage_final = 0;
 		size_t usage_diff = 0;
@@ -475,7 +530,11 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 		memory_usage_start = zend_memory_usage(1 TSRMLS_CC);
 		MEMTRACK_G(warnings) = 0;
 
+#if PHP_VERSION_ID < 50500
 		memtrack_old_execute(op_array TSRMLS_CC);
+#else
+		memtrack_old_execute_ex(execute_data TSRMLS_CC);
+#endif
 		memory_usage_final = zend_memory_usage(1 TSRMLS_CC);
 
 		if (MEMTRACK_G(warnings) && memory_usage_final > MEMTRACK_G(prev_memory_usage)) {
@@ -486,8 +545,8 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 
 		if (usage_diff >= MEMTRACK_G(soft_limit)) {
 			char *fname, *lc_fname;
-			char *filename = (EG(current_execute_data) && EG(current_execute_data)->op_array) ? EG(current_execute_data)->op_array->filename : "";
-			int lineno = (EG(current_execute_data) && EG(current_execute_data)->opline) ? EG(current_execute_data)->opline->lineno : 0;
+			char *filename = (edata && edata->op_array) ? edata->op_array->filename : "";
+			int lineno = (edata && edata->opline) ? edata->opline->lineno : 0;
 			int fname_len;
 
 			fname = mt_get_function_name(op_array TSRMLS_CC);
@@ -539,16 +598,28 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 }
 /* }}} */
 
+#if PHP_VERSION_ID < 50500
 void memtrack_execute_internal(zend_execute_data *current_execute_data, int return_value_used TSRMLS_DC) /* {{{ */
+#else
+void memtrack_execute_internal(zend_execute_data *current_execute_data, struct _zend_fcall_info *fci, int return_value_used TSRMLS_DC)
+#endif
 {
 	if (MEMTRACK_G(soft_limit) <= 0 && MEMTRACK_G(hard_limit) <= 0) {
+#if PHP_VERSION_ID < 50500
 		memtrack_old_execute_internal(current_execute_data, return_value_used TSRMLS_CC);
+#else
+		memtrack_old_execute_internal(current_execute_data, fci, return_value_used TSRMLS_CC);
+#endif
 	} else {
 		size_t memory_usage_start = 0, memory_usage_final = 0;
 		size_t usage_diff = 0;
 
 		memory_usage_start = zend_memory_usage(1 TSRMLS_CC);
+#if PHP_VERSION_ID < 50500
 		memtrack_old_execute_internal(current_execute_data, return_value_used TSRMLS_CC);
+#else
+		memtrack_old_execute_internal(current_execute_data, fci, return_value_used TSRMLS_CC);
+#endif
 		memory_usage_final = zend_memory_usage(1 TSRMLS_CC);
 
 		if (memory_usage_final >= memory_usage_start) {
