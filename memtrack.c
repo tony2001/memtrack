@@ -284,7 +284,7 @@ ZEND_DLEXPORT void memtrack_on_timeout(int seconds TSRMLS_DC) /* {{{ */
 	char *buf;
 
 	if (!MEMTRACK_G(enabled)) {
-		mt_saved_on_timeout(seconds);
+		mt_saved_on_timeout(seconds TSRMLS_CC);
 		return;
 	}
 
@@ -299,7 +299,7 @@ ZEND_DLEXPORT void memtrack_on_timeout(int seconds TSRMLS_DC) /* {{{ */
 	} else {
 		zend_error(E_CORE_WARNING, "%s", buf);
 	}
-	mt_saved_on_timeout(seconds);
+	mt_saved_on_timeout(seconds TSRMLS_CC);
 }
 /* }}} */
 
