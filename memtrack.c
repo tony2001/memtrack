@@ -66,26 +66,26 @@ static int memtrack_get_vm_size(void) /* {{{ */
 
 static char *mt_get_function_name(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 {
-	char *current_fname = NULL;
-	char *class_name, *fname;
+	char *current_fname = NULL, *class_name;
+	const char *fname;
 	zend_bool free_fname = 0;
 	int class_name_len, fname_len;
 	zend_execute_data *exec_data = EG(current_execute_data);
 	zend_class_entry *ce;
-	char *space;
+	const char *space;
 
 	if (op_array) {
 		ce = ((zend_function *)op_array)->common.scope;
-		class_name = ce ? ce->name : "";
+		class_name = ce ? (char *)ce->name : "";
 	} else {
-		class_name = get_active_class_name(&space TSRMLS_CC);
+		class_name = (char *)get_active_class_name(&space TSRMLS_CC);
 	}
 
 	if (class_name[0] == '\0') {
 		if (op_array) {
-			current_fname = op_array->function_name;
+			current_fname = (char *)op_array->function_name;
 		} else {
-			current_fname = get_active_function_name(TSRMLS_C);
+			current_fname = (char *)get_active_function_name(TSRMLS_C);
 		}
 	} else {
 		if (op_array) {
@@ -113,8 +113,8 @@ static char *mt_get_function_name(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 
 	if (!free_fname && !strcmp("main", current_fname)) {
 
-		if (exec_data && exec_data->opline && exec_data->opline->op2.op_type == IS_UNUSED) {
-			switch (Z_LVAL(exec_data->opline->op2.u.constant)) {
+		if (exec_data && exec_data->opline && GET_OP2_TYPE(exec_data) == IS_UNUSED) {
+			switch (GET_OP2_NAME(exec_data)) {
 				case ZEND_REQUIRE_ONCE:
 					current_fname = "require_once";
 					break;
@@ -210,7 +210,7 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 
 	MAKE_STD_ZVAL(trace);
 	MAKE_STD_ZVAL(*str_trace);
-	zend_fetch_debug_backtrace(trace, 0, 0 TSRMLS_CC);
+	ZEND_FETCH_DEBUG_BACKTRACE(trace);
 
 	if (remove_args) {
 		HashPosition pos;
@@ -227,15 +227,15 @@ static int php_memtrack_get_backtrace(zval **str_trace, int remove_args TSRMLS_D
 		}
 	}
 
-	php_start_ob_buffer (NULL, 0, 1 TSRMLS_CC);
+	PHP_OB_START_DEFAULT;
 	php_var_export(&trace, 1 TSRMLS_CC);
-	if (php_ob_get_buffer (*str_trace TSRMLS_CC) == FAILURE) {
+	if (PHP_OB_GET_BUF(*str_trace) == FAILURE) {
 		zval_ptr_dtor(&trace);
 		zval_ptr_dtor(str_trace);
 		*str_trace = NULL;
 		return FAILURE;
 	}
-	php_end_ob_buffer (0, 0 TSRMLS_CC);
+	PHP_OB_END_DISCARD;
 	zval_ptr_dtor(&trace);
 	return SUCCESS;
 }
@@ -438,7 +438,7 @@ void memtrack_execute(zend_op_array *op_array TSRMLS_DC) /* {{{ */
 
 		if (usage_diff >= MEMTRACK_G(soft_limit)) {
 			char *fname, *lc_fname;
-			char *filename = (EG(current_execute_data) && EG(current_execute_data)->op_array) ? EG(current_execute_data)->op_array->filename : "";
+			const char *filename = (EG(current_execute_data) && EG(current_execute_data)->op_array) ? EG(current_execute_data)->op_array->filename : "";
 			int lineno = (EG(current_execute_data) && EG(current_execute_data)->opline) ? EG(current_execute_data)->opline->lineno : 0;
 			int fname_len;
 
@@ -510,7 +510,7 @@ void memtrack_execute_internal(zend_execute_data *current_execute_data, int retu
 		if (usage_diff >= MEMTRACK_G(soft_limit)) {
 			char *lc_fname, *fname = mt_get_function_name(NULL TSRMLS_CC);
 			int lineno = (current_execute_data && current_execute_data->opline) ? current_execute_data->opline->lineno : 0;
-			char *filename = (current_execute_data && current_execute_data->op_array) ? current_execute_data->op_array->filename : "unknown";
+			const char *filename = (current_execute_data && current_execute_data->op_array) ? current_execute_data->op_array->filename : "unknown";
 			int fname_len;
 
 			fname_len = strlen(fname);
