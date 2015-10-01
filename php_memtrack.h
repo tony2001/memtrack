@@ -21,7 +21,7 @@
 #ifndef PHP_MEMTRACK_H
 #define PHP_MEMTRACK_H
 
-#define PHP_MEMTRACK_VERSION "0.2.0-dev"
+#define PHP_MEMTRACK_VERSION "0.3.0-dev"
 
 extern zend_module_entry memtrack_module_entry;
 #define phpext_memtrack_ptr &memtrack_module_entry
@@ -41,7 +41,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memtrack)
 	int warnings;
 	int vm_warned;
 	char *script_name;
-	zval *data;
+	zval data;
 ZEND_END_MODULE_GLOBALS(memtrack)
 
 #ifdef ZTS
