@@ -250,7 +250,7 @@ static int php_memtrack_get_backtrace(zval *str_trace) /* {{{ */
 	}
 
 	if (!Z_ISUNDEF(MEMTRACK_G(data))) {
-		//XXX //Z_ADDREF_P(MEMTRACK_G(data));
+		Z_ADDREF_P(&MEMTRACK_G(data));
 		add_assoc_zval(&trace, "memtrack_data", &MEMTRACK_G(data));
 	}
 
