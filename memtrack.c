@@ -95,7 +95,7 @@ static char *mt_get_function_name(zend_execute_data *execute_data) /* {{{ */
 	const char *space;
 
 	if (execute_data) {
-		ce = execute_data->called_scope;
+		ce = execute_data->func->common.scope;
 		class_name = ce ? ce->name->val : "";
 		class_name_len = ce ? ce->name->len : 0;
 	} else {
