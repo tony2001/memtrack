@@ -91,7 +91,7 @@ static char *mt_get_function_name(zend_execute_data *execute_data) /* {{{ */
 	zend_bool free_fname = 0;
 	int class_name_len, fname_len;
 	zend_class_entry *ce;
-	char *class_name, *fname, *current_fname = NULL;
+	char *class_name, *fname = NULL, *current_fname = NULL;
 	const char *space;
 
 	if (execute_data) {
