@@ -336,6 +336,9 @@ PHP_MSHUTDOWN_FUNCTION(memtrack)
  */
 PHP_RINIT_FUNCTION(memtrack)
 {
+	MEMTRACK_G(vm_warned) = 0;
+	ZVAL_UNDEF(&MEMTRACK_G(data));
+
 	if (!MEMTRACK_G(enabled)) {
 		return SUCCESS;
 	}
@@ -355,8 +358,6 @@ PHP_RINIT_FUNCTION(memtrack)
 		memtrack_execute_initialized = 1;
 	}
 
-	MEMTRACK_G(vm_warned) = 0;
-	ZVAL_UNDEF(&MEMTRACK_G(data));
 
 	php_memtrack_parse_ignore_funcs(TSRMLS_C);
 	return SUCCESS;
